@@ -434,9 +434,3 @@ The trained model files and preprocessing artifacts are stored under `models/`.
 * Vite
 * Plain CSS with switchable light and dark themes
 * Lucide icons
-
-## Authors
-
-**Sambhav Singh** (GOAT)
-Saksham Singh
-NITK Surathkal
