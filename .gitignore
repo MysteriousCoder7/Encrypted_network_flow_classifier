@@ -1,0 +1,60 @@
+# Dataset
+VPN-nonVPN-Dataset/
+
+# Generated selected flows
+selected_flows/
+
+# Frontend dependencies
+frontend/node_modules/
+node_modules/
+
+# Python virtual environments
+.venv/
+venv/
+env/
+ENV/
+backend/.venv/
+
+# npm cache / logs
+.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Frontend build
+frontend/dist/
+frontend/build/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE/editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
