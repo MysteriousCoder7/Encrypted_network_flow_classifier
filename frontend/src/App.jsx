@@ -587,6 +587,17 @@ function GcdTab() {
           text="The model receives k, mean residual, normalized residual, and the fraction within a tolerance of 4 bytes."
         />
       </div>
+
+      <div className="gcdImageContainer">
+        <img
+          src="/src/assets/GCD.png"
+          alt="Fuzzy-GCD packet size distribution and residual analysis"
+        />
+
+        <div className="gcdImageCaption">
+          Fuzzy-GCD packet size clustering & residual tolerance analysis
+        </div>
+      </div>
     </section>
   )
 }

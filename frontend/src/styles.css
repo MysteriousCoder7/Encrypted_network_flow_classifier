@@ -797,6 +797,33 @@ main {
   cursor: crosshair;
   user-select: none;
 }
+.gcdImageContainer {
+  margin-top: 32px;
+  background: var(--bg-surface-elevated, #0e1c26);
+  border: 1px solid var(--border-subtle, #172a36);
+  border-radius: 12px;
+  padding: 16px;
+  text-align: center;
+  overflow: hidden;
+}
+
+.gcdImageContainer img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+  display: block;
+  margin: 0 auto;
+  border: 1px solid rgba(0, 229, 255, 0.2);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.gcdImageCaption {
+  margin-top: 12px;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--text-secondary, #90afc0);
+  letter-spacing: 0.05em;
+}
 
 .heatCell:hover {
   transform: scale(1.1);
