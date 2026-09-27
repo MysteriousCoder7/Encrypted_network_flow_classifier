@@ -437,6 +437,6 @@ The trained model files and preprocessing artifacts are stored under `models/`.
 
 ## Authors
 
-**Sambhav Singh**
-
+**Sambhav Singh** (GOAT)
+Saksham Singh
 NITK Surathkal
