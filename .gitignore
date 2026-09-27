@@ -14,6 +14,8 @@ venv/
 env/
 ENV/
 backend/.venv/
+v/
+.venv*/
 
 # npm cache / logs
 .npm/
@@ -33,6 +35,8 @@ __pycache__/
 # Frontend build
 frontend/dist/
 frontend/build/
+frontend/.vite/
+*.local
 
 # Environment files
 .env
@@ -53,6 +57,9 @@ Thumbs.db
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
 
 # Temporary files
 *.tmp

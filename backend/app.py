@@ -12,6 +12,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import joblib
 
+from typing import List
+
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -25,10 +27,8 @@ app = FastAPI(title="Network Traffic Classifier")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173"
-    ],
+    # Any local port, so the Vite dev server works on 5173, 5174, etc.
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"]
@@ -684,27 +684,10 @@ def predict_json(
     ) = prepare_flow(df)
 
     return {
-        "outputs": {
-            "No-IBNN": build_prediction(
-                "No-IBNN",
-                normal_map
-            ),
-
-            "IBNN": build_prediction(
-                "IBNN",
-                normal_map
-            ),
-
-            "Fuzzy-GCD": build_prediction(
-                "Fuzzy-GCD",
-                gcd_map
-            ),
-
-            "Fuzzy-GCD + IBNN": build_prediction(
-                "Fuzzy-GCD + IBNN",
-                gcd_map
-            )
-        },
+        "outputs": run_models(
+            normal_map,
+            gcd_map
+        ),
 
         "fuzzy_gcd": {
             "best_k": float(
@@ -723,55 +706,12 @@ def predict_json(
     }
 
 
-@app.post("/predict-file")
-async def predict_file(
-    file: UploadFile = File(...)
-):
-    if not file.filename:
-        raise HTTPException(
-            status_code=400,
-            detail="No file selected"
-        )
+MAX_BATCH_FLOWS = 500
+MAX_PACKET_SIZES = 512
 
-    if not file.filename.lower().endswith(
-        ".parquet"
-    ):
-        raise HTTPException(
-            status_code=400,
-            detail="Only .parquet files are supported"
-        )
 
-    try:
-        contents = await file.read()
-
-        df = pd.read_parquet(
-            io.BytesIO(contents)
-        )
-
-    except Exception as e:
-        raise HTTPException(
-            status_code=422,
-            detail=f"Could not read Parquet file: {str(e)}"
-        )
-
-    if len(df) != 1:
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "message": "Expected exactly one flow",
-                "rows_found": len(df)
-            }
-        )
-
-    (
-        flow,
-        normal_map,
-        gcd_map,
-        gcd_features,
-        gcd_scaled
-    ) = prepare_flow(df)
-
-    outputs = {
+def run_models(normal_map, gcd_map):
+    return {
         "No-IBNN": build_prediction(
             "No-IBNN",
             normal_map
@@ -793,21 +733,52 @@ async def predict_file(
         )
     }
 
-    return {
-        "file_name": file.filename,
 
+def optional_text(flow, column):
+    if column not in flow.index or pd.isna(flow[column]):
+        return ""
+
+    return str(flow[column])
+
+
+def classify_flow(df):
+    """Run the full pipeline on a one-row DataFrame and describe every stage."""
+    (
+        flow,
+        normal_map,
+        gcd_map,
+        gcd_features,
+        gcd_scaled
+    ) = prepare_flow(df)
+
+    raw = df[feature_names].replace(
+        [np.inf, -np.inf],
+        np.nan
+    ).fillna(0).iloc[0]
+
+    packet_sizes = parse_packet_sizes(
+        flow["outer_splt_ps"]
+    )
+
+    return {
         "flow": {
-            "flow_id": str(
-                flow["flow_id"]
-                if "flow_id" in df.columns
-                else ""
-            ),
-            "true_label": str(
-                flow["application_name"]
-                if "application_name" in df.columns
-                else ""
-            )
+            "flow_id": optional_text(flow, "flow_id"),
+            "true_label": optional_text(flow, "application_name")
         },
+
+        "features": [
+            {
+                "name": name,
+                "raw": float(raw[name]),
+                "scaled": float(normal_map.flat[i])
+            }
+            for i, name in enumerate(feature_names)
+        ],
+
+        "packet_sizes": [
+            float(x)
+            for x in packet_sizes[:MAX_PACKET_SIZES]
+        ],
 
         "gcd": {
             "raw": {
@@ -836,7 +807,10 @@ async def predict_file(
             ]
         },
 
-        "outputs": outputs,
+        "outputs": run_models(
+            normal_map,
+            gcd_map
+        ),
 
         "maps": {
             "normal": normal_map[
@@ -849,6 +823,147 @@ async def predict_file(
                 0
             ].tolist()
         }
+    }
+
+
+async def read_flow_file(file):
+    name = (file.filename or "").lower()
+
+    if not name:
+        raise HTTPException(
+            status_code=400,
+            detail="No file selected"
+        )
+
+    if not name.endswith((".parquet", ".csv")):
+        raise HTTPException(
+            status_code=400,
+            detail="Only .parquet and .csv files are supported"
+        )
+
+    contents = await file.read()
+
+    try:
+        if name.endswith(".parquet"):
+            return pd.read_parquet(
+                io.BytesIO(contents)
+            )
+
+        return pd.read_csv(
+            io.BytesIO(contents)
+        )
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=422,
+            detail=f"Could not read {file.filename}: {str(e)}"
+        )
+
+
+def error_message(error):
+    detail = error.detail
+
+    if isinstance(detail, dict):
+        message = detail.get("message", "Prediction failed")
+
+        if detail.get("missing_features"):
+            message += ": " + ", ".join(
+                detail["missing_features"]
+            )
+
+        return message
+
+    return str(detail)
+
+
+@app.post("/predict-file")
+async def predict_file(
+    file: UploadFile = File(...)
+):
+    df = await read_flow_file(file)
+
+    if len(df) != 1:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Expected exactly one flow",
+                "rows_found": len(df)
+            }
+        )
+
+    return {
+        "file_name": file.filename,
+        **classify_flow(df)
+    }
+
+
+@app.post("/predict-batch")
+async def predict_batch(
+    files: List[UploadFile] = File(...)
+):
+    """Classify every row of every uploaded file, up to MAX_BATCH_FLOWS flows."""
+    file_reports = []
+    flows = []
+    skipped = 0
+
+    for file in files:
+        try:
+            df = await read_flow_file(file)
+        except HTTPException as e:
+            file_reports.append({
+                "file_name": file.filename,
+                "rows": 0,
+                "error": error_message(e)
+            })
+            continue
+
+        missing = [
+            x
+            for x in feature_names + ["outer_splt_ps"]
+            if x not in df.columns
+        ]
+
+        file_reports.append({
+            "file_name": file.filename,
+            "rows": len(df),
+            "error": (
+                "Missing required columns: " + ", ".join(missing)
+                if missing
+                else None
+            )
+        })
+
+        if missing:
+            continue
+
+        for row in range(len(df)):
+            if len(flows) >= MAX_BATCH_FLOWS:
+                skipped += 1
+                continue
+
+            entry = {
+                "file_name": file.filename,
+                "row": row
+            }
+
+            try:
+                entry.update(
+                    classify_flow(
+                        df.iloc[[row]].reset_index(drop=True)
+                    )
+                )
+            except HTTPException as e:
+                entry["error"] = error_message(e)
+            except Exception as e:
+                entry["error"] = f"Prediction failed: {str(e)}"
+
+            flows.append(entry)
+
+    return {
+        "files": file_reports,
+        "flows": flows,
+        "skipped": skipped,
+        "limit": MAX_BATCH_FLOWS
     }
 
 
