@@ -136,6 +136,27 @@
   box-sizing: border-box;
 }
 
+/* Elements toggled by app.js must stay hidden even when a class sets display. */
+[hidden] {
+  display: none !important;
+}
+
+/* The theme toggle shows a sun in dark mode and a moon in light mode. */
+:root[data-theme="light"] .when-dark,
+:root:not([data-theme="light"]) .when-light {
+  display: none;
+}
+
+.theme-toggle span {
+  display: grid;
+}
+
+/* Wrappers whose contents app.js replaces; the card inside is the grid item. */
+[data-sim-progress],
+[data-sim-scores] {
+  display: contents;
+}
+
 html {
   -webkit-text-size-adjust: 100%;
 }
@@ -3210,6 +3231,12 @@ a.btn-primary {
   white-space: nowrap;
 }
 
+.slide th,
+.slide td {
+  padding-left: 12px;
+  padding-right: 12px;
+}
+
 .sbars {
   display: grid;
   gap: 8px;
@@ -3309,6 +3336,8 @@ a.btn-primary {
 
 .slide {
   position: relative;
+  /* Let wide tables scroll inside their wrapper instead of widening the slide. */
+  min-width: 0;
   min-height: min(760px, calc(100vh - 140px));
   padding: 40px 44px;
   border-radius: 26px;

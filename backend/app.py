@@ -28,7 +28,8 @@ app = FastAPI(title="Network Traffic Classifier")
 
 app.add_middleware(
     CORSMiddleware,
-    # Any local port, so the Vite dev server works on 5173, 5174, etc.
+    # The pages are served by this app itself; this lets local tools on any port
+    # call the JSON API too.
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=True,
     allow_methods=["*"],
@@ -1148,6 +1149,19 @@ def classify_sample(file_name: str):
         **sample,
         "flows": flows
     }
+
+
+# The web interface: server-rendered pages, HTMX fragments and static files.
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+from backend.web.routes import create_web_router  # noqa: E402
+
+app.mount(
+    "/static",
+    StaticFiles(directory=os.path.join(BASE, "backend", "web", "static")),
+    name="static"
+)
+app.include_router(create_web_router(sys.modules[__name__]))
 
 
 if __name__ == "__main__":

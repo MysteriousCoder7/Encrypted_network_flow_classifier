@@ -1,7 +1,7 @@
 """Summarise the notebook's evaluation outputs for the web interface.
 
 Reads the CSVs that analyse.py and plot.py write to backend/selected_flows/
-and writes frontend/src/data/results.json, which the Project page and the
+and writes backend/web/results.json, which the Project page and the
 dashboard's test-set comparison use. Run from the repository root:
 
     python backend/export_results.py
@@ -14,7 +14,7 @@ import pandas as pd
 
 BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FLOWS_DIR = os.path.join(BASE, "backend", "selected_flows")
-OUTPUT = os.path.join(BASE, "frontend", "src", "data", "results.json")
+OUTPUT = os.path.join(BASE, "backend", "web", "results.json")
 
 MODELS = ["No-IBNN", "IBNN", "Fuzzy-GCD", "Fuzzy-GCD + IBNN"]
 

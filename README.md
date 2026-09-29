@@ -9,7 +9,7 @@ The project evaluates four classification models with and without **Fuzzy-GCD fe
 * Fuzzy-GCD
 * Fuzzy-GCD + IBNN
 
-The system includes a FastAPI backend for model inference and a React web interface (FlowLens) for classifying batches of flows and comparing the four models side by side.
+Everything runs in Python: one FastAPI server loads the models, serves the JSON API, and renders the web interface (FlowLens) with Jinja2 templates and HTMX. There is no Node.js, npm or build step.
 
 ## Project Overview
 
@@ -143,39 +143,35 @@ The feature scaler and GCD scaler are loaded from the `models/` directory.
 Encrypted_network_flow_classifier/
 │
 ├── backend/
-│   ├── app.py                  # FastAPI inference server
-│   ├── export_results.py       # builds frontend/src/data/results.json from the CSVs below
+│   ├── app.py                  # FastAPI server: models, pipeline, JSON API; mounts the web interface
+│   ├── export_results.py       # builds backend/web/results.json from the CSVs below
 │   ├── PythonNotebook.ipynb    # training and evaluation notebook (Kaggle)
 │   ├── requirements.txt
-│   └── selected_flows/         # prepared test flows and evaluation outputs
-│       ├── all_correct_*.parquet   # 9 flows all four models classify correctly
-│       ├── gcd_only_*.parquet      # 6 flows only the GCD models classify correctly
-│       ├── all_test_predictions.csv
-│       ├── all_four_correct_selected.csv
-│       ├── gcd_only_selected.csv
-│       └── plots/              # overall_metrics.csv, gcd_label_metrics.csv and the PNG plots
-│
-├── frontend/
-│   ├── src/
-│   │   ├── assets/           # figures shown in the UI
-│   │   ├── data/results.json # evaluation summary written by export_results.py
-│   │   ├── App.jsx           # shell, page routing, backend status, theme toggle
-│   │   ├── DashboardPage.jsx # page 1: simulation over the prepared flows
-│   │   ├── UploadPage.jsx    # page 2: upload and classify your own files
-│   │   ├── ProjectPage.jsx   # page 3: presentation of the project and results
-│   │   ├── FlowResults.jsx   # shared results: insights, flow table, CSV export, detail
-│   │   ├── Insights.jsx      # batch-level insights and model comparison
-│   │   ├── FlowDetail.jsx    # per-flow breakdown, packet sizes, model inputs
-│   │   ├── Charts.jsx        # shared chart pieces: tooltip, legend, bars, tiles
-│   │   ├── Layout.jsx        # page header and backend notice
-│   │   ├── PacketStream.jsx  # animated packet-size visual in the hero
-│   │   ├── models.js         # API URL, model list, formatting helpers
-│   │   ├── main.jsx
-│   │   └── styles.css        # light and dark themes
-│   ├── index.html
-│   ├── package.json
-│   ├── package-lock.json
-│   └── vite.config.js
+│   ├── selected_flows/         # prepared test flows and evaluation outputs
+│   │   ├── all_correct_*.parquet   # 9 flows all four models classify correctly
+│   │   ├── gcd_only_*.parquet      # 6 flows only the GCD models classify correctly
+│   │   ├── all_test_predictions.csv
+│   │   ├── all_four_correct_selected.csv
+│   │   ├── gcd_only_selected.csv
+│   │   └── plots/              # overall_metrics.csv, gcd_label_metrics.csv and the PNG plots
+│   └── web/                    # the web interface
+│       ├── routes.py           # pages, HTMX fragments, CSV export, simulation event stream
+│       ├── views.py            # everything the pages compute: insights, flow detail, slides
+│       ├── icons.py            # inline SVG icons (lucide)
+│       ├── results.json        # evaluation summary written by export_results.py
+│       ├── templates/
+│       │   ├── base.html       # layout: header, tabs, theme toggle, footer
+│       │   ├── macros.html     # shared pieces: stat tiles, panels, bars, legends, slides
+│       │   ├── dashboard.html  # page 1: hero and simulation
+│       │   ├── classify.html   # page 2: upload and classify your own files
+│       │   ├── project.html    # page 3: presentation of the project and results
+│       │   └── partials/       # fragments: results, insights, flow table and detail, simulation cards
+│       └── static/
+│           ├── styles.css      # light and dark themes
+│           ├── app.js          # browser behaviour: theme, tooltips, upload queue, simulation, slides
+│           ├── favicon.svg
+│           ├── img/            # the evaluation plots and the Fuzzy-GCD diagram
+│           └── vendor/htmx.min.js
 │
 ├── models/
 │   ├── config.json
@@ -196,9 +192,9 @@ Encrypted_network_flow_classifier/
 └── .gitignore
 ```
 
-The repository does not include the original dataset, frontend `node_modules`, or Python virtual environments. The prepared flows in `backend/selected_flows/` are included because the dashboard simulation uses them.
+The repository does not include the original dataset or Python virtual environments. The prepared flows in `backend/selected_flows/` are included because the dashboard simulation uses them.
 
-## Running the Backend
+## Running the Application
 
 Create a virtual environment and install the dependencies (from the repository root):
 
@@ -210,15 +206,25 @@ pip install -r backend/requirements.txt
 
 Any of the environment folder names `.venv/`, `venv/`, `v/`, `env/` or `backend/.venv/` is ignored by git.
 
-Start the API **from the repository root**, so that `backend.app` can find the `models/` directory:
+Start the server **from the repository root**, so that `backend.app` can find the `models/` directory:
 
 ```bash
 python -m uvicorn backend.app:app --port 8000
 ```
 
-Add `--reload` to restart automatically when `backend/app.py` changes. Check it is running by opening <http://localhost:8000/health>. Interactive API docs are at <http://localhost:8000/docs>.
+Open <http://localhost:8000>. The same server provides the web interface and the JSON API, so there is nothing else to start. Add `--reload` to restart automatically when files under `backend/` change. Interactive API docs are at <http://localhost:8000/docs>.
 
-`pyarrow` (Parquet reading) and `python-multipart` (file uploads) are required. If the frontend reports that it can't reach the backend, the server isn't running or one of these is missing.
+To open the interface from another machine, add `--host 0.0.0.0` and browse to `http://<server-ip>:8000`.
+
+### Pages
+
+| Path | Page |
+|---|---|
+| `/` | Dashboard with the simulation |
+| `/classify` | Upload and classify your own files |
+| `/project` | Project presentation |
+
+The pages also use a few internal routes (`/classify/run`, `/simulate`, `/runs/{id}/...`) that return HTML fragments, the simulation's event stream and CSV downloads. Results are kept in memory for the 20 most recent runs, so they are lost when the server restarts.
 
 ### API endpoints
 
@@ -236,42 +242,23 @@ Each classified flow includes the four model outputs with full class probabiliti
 
 The prepared flows are read from `backend/selected_flows/`. Set `FLOWLENS_SAMPLES_DIR` to use another folder of single-flow Parquet files.
 
-## Running the Frontend
-
-With the backend running, in a second terminal:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-Open <http://localhost:5173>. The frontend calls the API at `http://localhost:8000` by default; set `VITE_API_URL` to point it elsewhere:
-
-```bash
-VITE_API_URL=http://192.168.1.20:8000 npm run dev
-```
-
-The backend accepts requests from `localhost` and `127.0.0.1` on any port, so it keeps working when Vite moves to 5174 or another port. To open the interface from a different machine, start the backend with `--host 0.0.0.0` and extend `allow_origin_regex` in `backend/app.py` to include that host.
-
-For a production build, run `npm run build` and serve the `frontend/dist/` folder.
-
 ### Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
-| "Backend offline" in the top bar | The API isn't running on port 8000. Start it from the repository root, then click the refresh icon next to the status. |
-| "Address already in use" when starting the backend | Another backend is already on port 8000. Stop it (`pkill -f "uvicorn backend.app"`) or use `--port 8001` with `VITE_API_URL=http://localhost:8001`. |
+| The page doesn't load | The server isn't running. Start it from the repository root and open <http://localhost:8000>. |
+| "Address already in use" when starting the server | Another server is already on port 8000. Stop it (`pkill -f "uvicorn backend.app"`) or use `--port 8001` and open that port instead. |
+| "These results have expired" | The server restarted or more than 20 newer runs replaced them. Run the classification or simulation again. |
 | A file shows "Missing required columns" | The file lacks some of the 21 features or `outer_splt_ps`; see *Input files* below. |
-| `ModuleNotFoundError` when starting the backend | Install the requirements into the active environment: `pip install -r backend/requirements.txt`. |
+| `ModuleNotFoundError` when starting the server | Install the requirements into the active environment: `pip install -r backend/requirements.txt`. |
 
 ## Using the Web Interface
 
-The interface has three pages, switched from the top bar (each has its own link: `#/dashboard`, `#/classify`, `#/project`).
+The interface has three pages, switched from the top bar: `/`, `/classify` and `/project`.
 
 ### 1. Dashboard: simulation
 
-**Run simulation** replays the prepared test flows from `backend/selected_flows/` through the live backend, one flow at a time.
+**Run simulation** replays the prepared test flows from `backend/selected_flows/` through the models, one flow at a time. The server classifies each flow and streams the result to the page as it happens (server-sent events).
 
 * **Scenario**: all prepared flows, only the ones all four models classify correctly, or only the ones where just the Fuzzy-GCD models are right.
 * **Speed**: *Real time* steps through each inference stage (read, scale, Fuzzy-GCD, 5 × 5 maps, four models), *Fast* shortens the steps, and *Instant* classifies everything at once.
@@ -336,7 +323,7 @@ Use the sun/moon button in the top bar to switch themes. Dark is the default, an
 
 A slide-style presentation of the work: the problem, dataset, pipeline, Fuzzy-GCD, the network architecture, the information bottleneck, the four experiments, overall and per-class results, where Fuzzy-GCD helps, agreement and errors, and conclusions. Use the side navigation, the floating controls, or the left and right arrow keys to move between slides.
 
-Its figures come from `frontend/src/data/results.json`. After re-running the evaluation, regenerate it:
+Its figures come from `backend/web/results.json`. After re-running the evaluation, regenerate it (then restart the server):
 
 ```bash
 python backend/export_results.py
@@ -417,7 +404,7 @@ all_models_metrics.png
 highest_gcd_labels.png
 ```
 
-Copies of both plots are in `frontend/src/assets/` and shown on the **Project** page. The outputs used by the interface are kept in `backend/selected_flows/` (move `analyse.py`'s output there, or point `FLOWLENS_SAMPLES_DIR` at it).
+Copies of both plots are in `backend/web/static/img/` and shown on the **Project** page. The outputs used by the interface are kept in `backend/selected_flows/` (move `analyse.py`'s output there, or point `FLOWLENS_SAMPLES_DIR` at it).
 
 The plots can be used to compare the four models and identify application labels where GCD-based features provide the largest improvement.
 
@@ -442,8 +429,6 @@ The following are intentionally excluded from version control (see `.gitignore`)
 ```text
 VPN-nonVPN-Dataset/        original dataset
 /selected_flows/           analyse.py output at the repository root (backend/selected_flows/ is kept)
-frontend/node_modules/     npm dependencies
-frontend/dist/             production build
 .venv/ venv/ v/ env/       Python virtual environments
 backend/.venv/
 __pycache__/               Python bytecode caches
@@ -468,10 +453,13 @@ The trained model files and preprocessing artifacts are stored under `models/`.
 * Python
 * FastAPI and Uvicorn
 * PyArrow (Parquet input)
+* Jinja2
 
-### Frontend
+### Web interface
 
-* React
-* Vite
+* Jinja2 templates rendered by FastAPI
+* HTMX for table filters and loading a flow's breakdown
+* Server-sent events for the live simulation
+* A small plain-JavaScript file for browser-only behaviour (theme, tooltips, drag and drop, slide keys)
 * Plain CSS with switchable light and dark themes
-* Lucide icons
+* Lucide icons, inlined as SVG
