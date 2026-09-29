@@ -462,4 +462,4 @@ The trained model files and preprocessing artifacts are stored under `models/`.
 * Server-sent events for the live simulation
 * A small plain-JavaScript file for browser-only behaviour (theme, tooltips, drag and drop, slide keys)
 * Plain CSS with switchable light and dark themes
-* Lucide icons, inlined as SVG
+* Lucide icons
