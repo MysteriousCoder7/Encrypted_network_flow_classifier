@@ -54,6 +54,7 @@ const plainNames = {
   outer_bytes_out: "Bytes outbound"
 }
 
+// Turns a feature column name such as outer_mean_piat_ms_in into a readable label.
 export function featureLabel(name) {
   if (plainNames[name]) return plainNames[name]
 
@@ -67,10 +68,13 @@ export function featureLabel(name) {
   return `${stats[stat]} inter-arrival${suffix} (ms)`
 }
 
+// Formats a 0-1 fraction as a percentage string.
 export function pct(value, digits = 1) {
   return `${(Number(value) * 100).toFixed(digits)}%`
 }
 
+// Formats a number compactly: thousands separators for large values, four
+// significant digits for small ones.
 export function formatNumber(value) {
   const number = Number(value)
 
@@ -84,17 +88,20 @@ export function formatNumber(value) {
   return number.toLocaleString(undefined, { maximumSignificantDigits: 4 })
 }
 
+// True when the flow came with a true application label.
 export function hasLabel(flow) {
   return Boolean(flow.flow?.true_label)
 }
 
+// Returns a model output's most likely classes as [name, probability] pairs.
 export function topPredictions(output, count = 3) {
   return Object.entries(output.probabilities || {})
     .sort((a, b) => b[1] - a[1])
     .slice(0, count)
 }
 
-// Adds consensus, agreement and correctness to a flow returned by /predict-batch.
+// Adds a stable id, the majority class, its vote count and per-model correctness to a
+// flow returned by the backend.
 export function describeFlow(flow, index) {
   const id = `${flow.file_name}#${flow.row}#${index}`
 
@@ -119,11 +126,13 @@ export function describeFlow(flow, index) {
   }
 }
 
+// Arithmetic mean, or 0 for an empty list.
 export function mean(values) {
   return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0
 }
 
-// How decided a model is: gap between its top two classes, and normalised entropy (0 = certain, 1 = uniform).
+// How decided a model is: the gap between its top two classes, and normalised
+// entropy (0 is certain, 1 is a uniform guess).
 export function uncertainty(output) {
   const probabilities = Object.values(output.probabilities || {}).sort((a, b) => b - a)
   const margin = (probabilities[0] ?? 0) - (probabilities[1] ?? 0)
@@ -137,10 +146,12 @@ export function uncertainty(output) {
   }
 }
 
+// Raw value of one named input feature for a flow.
 export function featureValue(flow, name) {
   return flow.features?.find(feature => feature.name === name)?.raw ?? 0
 }
 
+// Formats a byte count with B, KB, MB, GB or TB units.
 export function formatBytes(bytes) {
   const value = Number(bytes)
   if (!Number.isFinite(value)) return "–"
@@ -154,6 +165,7 @@ export function formatBytes(bytes) {
   return `${scaled.toLocaleString(undefined, { maximumFractionDigits: index ? 1 : 0 })} ${units[index]}`
 }
 
+// Formats milliseconds as ms, s, min or h.
 export function formatDuration(ms) {
   const value = Number(ms)
   if (!Number.isFinite(value)) return "–"

@@ -2,8 +2,8 @@ import { useState } from "react"
 
 import { MODELS } from "./models"
 
-// One hover/focus tooltip per chart. `bind(tip)` returns the handlers for a mark;
-// a tip is { title, rows: [{ color, label, value }] }.
+// Shared hover and focus tooltip for chart marks. bind(tip) returns the handlers for a
+// mark; the returned node renders the tip { title, rows: [{ color, label, value }] }.
 export function useTooltip() {
   const [tip, setTip] = useState(null)
 
@@ -35,6 +35,7 @@ export function useTooltip() {
   return [bind, node]
 }
 
+// Legend with one swatch per model, in the fixed model order.
 export function ModelLegend() {
   return (
     <div className="legend" aria-label="Models">
@@ -48,6 +49,7 @@ export function ModelLegend() {
   )
 }
 
+// Card with an icon, title and subtitle, used for every insight and chart.
 export function Panel({ title, subtitle, icon: Icon, className = "", children }) {
   return (
     <section className={`panel ${className}`}>
@@ -67,6 +69,7 @@ export function Panel({ title, subtitle, icon: Icon, className = "", children })
   )
 }
 
+// Headline number with a label and a short note; tone highlights it as accent, good or bad.
 export function StatTile({ label, value, note, tone, icon: Icon }) {
   return (
     <div className={`stat ${tone ? `stat-${tone}` : ""}`}>
@@ -80,14 +83,14 @@ export function StatTile({ label, value, note, tone, icon: Icon }) {
   )
 }
 
-// Horizontal grouped bars: one row per category, one thin bar per model.
-// rows: [{ label, values: [number per model] }]
-export function GroupedBars({ rows, max, format, unit }) {
+// Horizontal grouped bars: one row per category and one thin bar per series (the four
+// models by default), with a tooltip comparing all series.
+export function GroupedBars({ rows, max, format, unit, series = MODELS, showValues = false }) {
   const [bind, tooltip] = useTooltip()
   const top = max ?? Math.max(1e-9, ...rows.flatMap(row => row.values))
 
   return (
-    <div className="gbars">
+    <div className={`gbars ${showValues ? "gbars-values" : ""}`}>
       {rows.map(row => (
         <div className="gbar-row" key={row.label}>
           <span className="gbar-label" title={row.label}>
@@ -95,18 +98,18 @@ export function GroupedBars({ rows, max, format, unit }) {
           </span>
 
           <div className="gbar-group">
-            {MODELS.map((model, index) => {
+            {series.map((item, index) => {
               const value = row.values[index]
               return (
                 <div
                   className="gbar-track"
-                  key={model.name}
-                  aria-label={`${row.label}, ${model.name}: ${format(value)}${unit ? ` ${unit}` : ""}`}
+                  key={item.name}
+                  aria-label={`${row.label}, ${item.name}: ${format(value)}${unit ? ` ${unit}` : ""}`}
                   {...bind({
                     title: row.label,
-                    rows: MODELS.map((m, i) => ({
-                      color: m.color,
-                      label: m.name,
+                    rows: series.map((s, i) => ({
+                      color: s.color,
+                      label: s.name,
                       value: format(row.values[i])
                     }))
                   })}
@@ -114,10 +117,11 @@ export function GroupedBars({ rows, max, format, unit }) {
                   <div
                     className="gbar"
                     style={{
-                      width: `${(value / top) * 100}%`,
-                      background: model.color
+                      width: `${(Math.max(0, value) / top) * 100}%`,
+                      background: item.color
                     }}
                   />
+                  {showValues && <span className="gbar-value">{format(value)}</span>}
                 </div>
               )
             })}
@@ -125,6 +129,75 @@ export function GroupedBars({ rows, max, format, unit }) {
         </div>
       ))}
       {tooltip}
+    </div>
+  )
+}
+
+// Bars that extend left or right of a zero line, for gains and losses per category.
+export function DivergingBars({ rows, series, format }) {
+  const [bind, tooltip] = useTooltip()
+  const limit = Math.max(1e-9, ...rows.flatMap(row => row.values.map(Math.abs)))
+
+  return (
+    <div className="dbars">
+      {rows.map(row => (
+        <div className="gbar-row" key={row.label}>
+          <span className="gbar-label" title={row.label}>
+            {row.label}
+          </span>
+
+          <div className="gbar-group">
+            {series.map((item, index) => {
+              const value = row.values[index]
+              const width = `${(Math.abs(value) / limit) * 50}%`
+
+              return (
+                <div
+                  className="dbar-track"
+                  key={item.name}
+                  aria-label={`${row.label}, ${item.name}: ${format(value)}`}
+                  {...bind({
+                    title: row.label,
+                    rows: series.map((s, i) => ({
+                      color: s.color,
+                      label: s.name,
+                      value: format(row.values[i])
+                    }))
+                  })}
+                >
+                  <div
+                    className={`dbar ${value < 0 ? "dbar-neg" : ""}`}
+                    style={{ width, background: item.color }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+      <div className="gbar-row dbar-axis" aria-hidden="true">
+        <span />
+        <div className="dbar-ticks">
+          <span>{format(-limit)}</span>
+          <span>0</span>
+          <span>{format(limit)}</span>
+        </div>
+      </div>
+      {tooltip}
+    </div>
+  )
+}
+
+// Legend for an arbitrary list of { name, color } series.
+export function SeriesLegend({ series }) {
+  return (
+    <div className="legend">
+      {series.map(item => (
+        <span key={item.name}>
+          <i style={{ background: item.color }} />
+          {item.name}
+        </span>
+      ))}
     </div>
   )
 }

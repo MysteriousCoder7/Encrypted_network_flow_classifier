@@ -2,7 +2,7 @@
 VPN-nonVPN-Dataset/
 
 # Generated selected flows
-selected_flows/
+/selected_flows/
 
 # Frontend dependencies
 frontend/node_modules/

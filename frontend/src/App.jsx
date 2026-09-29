@@ -1,17 +1,26 @@
 import { useCallback, useEffect, useState } from "react"
-import { Activity, BarChart3, Brain, Calculator, Moon, RefreshCw, Sun } from "lucide-react"
+import { LayoutDashboard, Moon, Presentation, RefreshCw, Sun, UploadCloud } from "lucide-react"
 
-import Classifier from "./Classifier"
-import { EvaluationTab, GcdTab, IbTab } from "./Explainers"
+import DashboardPage from "./DashboardPage"
+import ProjectPage from "./ProjectPage"
+import UploadPage from "./UploadPage"
 import { API } from "./models"
 
+// Pages live in the URL hash (#/dashboard, #/classify, #/project) so links and Back work.
 const tabs = [
-  { id: "classify", label: "Classify", icon: Activity },
-  { id: "gcd", label: "Fuzzy-GCD", icon: Calculator },
-  { id: "ib", label: "Information bottleneck", icon: Brain },
-  { id: "evaluation", label: "Evaluation", icon: BarChart3 }
+  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "classify", label: "Classify files", icon: UploadCloud },
+  { id: "project", label: "Project", icon: Presentation }
 ]
 
+// Reads the current page from the URL hash (#/dashboard, #/classify, #/project),
+// falling back to the dashboard for anything unknown.
+function pageFromHash() {
+  const id = window.location.hash.replace(/^#\/?/, "")
+  return tabs.some(tab => tab.id === id) ? id : "dashboard"
+}
+
+// Returns the theme saved in this browser, or dark when nothing is saved or storage is blocked.
 function savedTheme() {
   try {
     return localStorage.getItem("flowlens-theme") === "light" ? "light" : "dark"
@@ -20,8 +29,10 @@ function savedTheme() {
   }
 }
 
+// Top-level shell: header with page tabs, backend status and theme toggle, and the
+// current page. Checks the backend on load and keeps the theme in sync.
 function App() {
-  const [tab, setTab] = useState("classify")
+  const [tab, setTab] = useState(pageFromHash)
   const [theme, setTheme] = useState(savedTheme)
   const [backend, setBackend] = useState("checking")
   const [classCount, setClassCount] = useState(null)
@@ -44,6 +55,15 @@ function App() {
   }, [checkBackend])
 
   useEffect(() => {
+    const onHash = () => {
+      setTab(pageFromHash())
+      window.scrollTo(0, 0)
+    }
+    window.addEventListener("hashchange", onHash)
+    return () => window.removeEventListener("hashchange", onHash)
+  }, [])
+
+  useEffect(() => {
     document.documentElement.dataset.theme = theme
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", theme === "light" ? "#eef2fb" : "#050914")
     try {
@@ -59,7 +79,7 @@ function App() {
 
       <header className="bar">
         <div className="bar-inner">
-          <a className="brand" href="/" aria-label="FlowLens home">
+          <a className="brand" href="#/dashboard" aria-label="FlowLens dashboard">
             <span className="brand-tile">
               <BrandMark />
             </span>
@@ -71,16 +91,15 @@ function App() {
 
           <nav className="tabs" aria-label="Sections">
             {tabs.map(({ id, label, icon: Icon }) => (
-              <button
+              <a
                 key={id}
-                type="button"
+                href={`#/${id}`}
                 className="tab"
                 aria-current={tab === id ? "page" : undefined}
-                onClick={() => setTab(id)}
               >
                 <Icon size={16} aria-hidden="true" />
                 {label}
-              </button>
+              </a>
             ))}
           </nav>
 
@@ -100,17 +119,22 @@ function App() {
       </header>
 
       <main className="page">
-        {tab === "classify" && (
-          <Classifier
+        {tab === "dashboard" && (
+          <DashboardPage
             backend={backend}
             classCount={classCount}
             onBackendError={() => setBackend("offline")}
             onBackendOk={() => setBackend("online")}
           />
         )}
-        {tab === "gcd" && <GcdTab />}
-        {tab === "ib" && <IbTab />}
-        {tab === "evaluation" && <EvaluationTab />}
+        {tab === "classify" && (
+          <UploadPage
+            backend={backend}
+            onBackendError={() => setBackend("offline")}
+            onBackendOk={() => setBackend("online")}
+          />
+        )}
+        {tab === "project" && <ProjectPage />}
       </main>
 
       <footer className="footer">
@@ -121,6 +145,8 @@ function App() {
   )
 }
 
+// Pill in the top bar showing whether the backend answers /health, with a retry
+// button when it is offline.
 function BackendStatus({ state, onRetry }) {
   const text = {
     checking: "Checking backend",
@@ -147,7 +173,7 @@ function BackendStatus({ state, onRetry }) {
   )
 }
 
-// Four packet-size bars in the four model colours.
+// Logo: four packet-size bars, one in each model's colour.
 function BrandMark() {
   return (
     <svg className="brand-mark" viewBox="0 0 24 24" aria-hidden="true">

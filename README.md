@@ -143,19 +143,32 @@ The feature scaler and GCD scaler are loaded from the `models/` directory.
 Encrypted_network_flow_classifier/
 │
 ├── backend/
-│   ├── app.py              # FastAPI inference server
-│   └── requirements.txt
+│   ├── app.py                  # FastAPI inference server
+│   ├── export_results.py       # builds frontend/src/data/results.json from the CSVs below
+│   ├── PythonNotebook.ipynb    # training and evaluation notebook (Kaggle)
+│   ├── requirements.txt
+│   └── selected_flows/         # prepared test flows and evaluation outputs
+│       ├── all_correct_*.parquet   # 9 flows all four models classify correctly
+│       ├── gcd_only_*.parquet      # 6 flows only the GCD models classify correctly
+│       ├── all_test_predictions.csv
+│       ├── all_four_correct_selected.csv
+│       ├── gcd_only_selected.csv
+│       └── plots/              # overall_metrics.csv, gcd_label_metrics.csv and the PNG plots
 │
 ├── frontend/
 │   ├── src/
 │   │   ├── assets/           # figures shown in the UI
-│   │   ├── App.jsx           # shell, tabs, backend status, theme toggle
-│   │   ├── Classifier.jsx    # hero, file queue, results table, CSV export
+│   │   ├── data/results.json # evaluation summary written by export_results.py
+│   │   ├── App.jsx           # shell, page routing, backend status, theme toggle
+│   │   ├── DashboardPage.jsx # page 1: simulation over the prepared flows
+│   │   ├── UploadPage.jsx    # page 2: upload and classify your own files
+│   │   ├── ProjectPage.jsx   # page 3: presentation of the project and results
+│   │   ├── FlowResults.jsx   # shared results: insights, flow table, CSV export, detail
 │   │   ├── Insights.jsx      # batch-level insights and model comparison
 │   │   ├── FlowDetail.jsx    # per-flow breakdown, packet sizes, model inputs
 │   │   ├── Charts.jsx        # shared chart pieces: tooltip, legend, bars, tiles
+│   │   ├── Layout.jsx        # page header and backend notice
 │   │   ├── PacketStream.jsx  # animated packet-size visual in the hero
-│   │   ├── Explainers.jsx    # Fuzzy-GCD, IB and evaluation pages
 │   │   ├── models.js         # API URL, model list, formatting helpers
 │   │   ├── main.jsx
 │   │   └── styles.css        # light and dark themes
@@ -183,7 +196,7 @@ Encrypted_network_flow_classifier/
 └── .gitignore
 ```
 
-The repository does not include the original dataset, generated selected flows, frontend `node_modules`, or Python virtual environments.
+The repository does not include the original dataset, frontend `node_modules`, or Python virtual environments. The prepared flows in `backend/selected_flows/` are included because the dashboard simulation uses them.
 
 ## Running the Backend
 
@@ -216,8 +229,12 @@ Add `--reload` to restart automatically when `backend/app.py` changes. Check it 
 | `POST` | `/predict-file` | One file (`file`) containing exactly one flow |
 | `POST` | `/predict-batch` | Several files (`files`), every row classified; up to 500 flows per request |
 | `POST` | `/predict` | One flow as JSON: `{"flow": {...}}` |
+| `GET` | `/samples` | The prepared flow files the dashboard simulation can run |
+| `POST` | `/samples/{file_name}/classify` | Classify one prepared flow file by name |
 
-Each classified flow includes the four model outputs with full class probabilities, the raw and scaled input features, the packet-size sequence, the Fuzzy-GCD features, and both 5 × 5 input maps.
+Each classified flow includes the four model outputs with full class probabilities, the raw and scaled input features, the packet-size sequence, the Fuzzy-GCD features, both 5 × 5 input maps, and flow context (endpoints, protocol, TLS server name, packet count) when the file has those columns. The context is shown in the interface only; it is never a model input.
+
+The prepared flows are read from `backend/selected_flows/`. Set `FLOWLENS_SAMPLES_DIR` to use another folder of single-flow Parquet files.
 
 ## Running the Frontend
 
@@ -250,6 +267,22 @@ For a production build, run `npm run build` and serve the `frontend/dist/` folde
 
 ## Using the Web Interface
 
+The interface has three pages, switched from the top bar (each has its own link: `#/dashboard`, `#/classify`, `#/project`).
+
+### 1. Dashboard: simulation
+
+**Run simulation** replays the prepared test flows from `backend/selected_flows/` through the live backend, one flow at a time.
+
+* **Scenario**: all prepared flows, only the ones all four models classify correctly, or only the ones where just the Fuzzy-GCD models are right.
+* **Speed**: *Real time* steps through each inference stage (read, scale, Fuzzy-GCD, 5 × 5 maps, four models), *Fast* shortens the steps, and *Instant* classifies everything at once.
+* While it runs: progress, the flow being classified and its current stage, live accuracy per model, and a live feed of each classified flow with its server name, endpoint and every model's verdict.
+* When it finishes: the full results and insights below, with each model's accuracy on the whole 67,554-flow test set shown next to its accuracy on the sample.
+* A summary of how the full test set splits between flows all models get right, flows only the GCD models get right, and flows all models miss.
+
+### 2. Classify files
+
+Upload your own flow files and get the same results and insights.
+
 ### Input files
 
 The classifier accepts `.parquet` and `.csv` files. **Every row is one flow.** Each row needs:
@@ -261,7 +294,7 @@ The classifier accepts `.parquet` and `.csv` files. **Every row is one flow.** E
 | `flow_id` | No | Identifying the flow in the results |
 | `application_name` | No | True label, used to mark predictions correct or wrong and compute accuracy |
 
-Single-flow files for testing are produced by `analyse.py` in `selected_flows/`. Any rows exported from the dataset's session flow files also work.
+The files in `backend/selected_flows/` are ready to upload. Any rows exported from the dataset's session flow files also work.
 
 ### Classifying
 
@@ -269,9 +302,9 @@ Single-flow files for testing are produced by `analyse.py` in `selected_flows/`.
 2. Files collect in the **Queue**. Remove any you don't want; files that aren't Parquet or CSV are rejected with a note.
 3. Click **Classify**. All queued files are sent in one request, and each file reports how many flows were read or why it failed (for example, missing columns).
 
-### Results
+### Results (dashboard and Classify files)
 
-After classification the page shows batch-level insights:
+After classification both pages show batch-level insights:
 
 * **Headline figures**: flows classified, how often all four models agree, mean confidence, the best model and majority-vote accuracy (when true labels are present).
 * **Model scorecards**: accuracy, mean confidence, number of classes predicted, low-confidence predictions, and confidence when right versus wrong.
@@ -299,9 +332,15 @@ Hover or focus any chart mark for exact values.
 
 Use the sun/moon button in the top bar to switch themes. Dark is the default, and the choice is remembered in the browser. Each model keeps the same colour in both themes (No-IBNN blue, IBNN orange, Fuzzy-GCD aqua, Fuzzy-GCD + IBNN yellow); the palette is checked for colour-blind separation.
 
-### Method pages
+### 3. Project
 
-The **Fuzzy-GCD**, **Information bottleneck** and **Evaluation** tabs explain the methods and show the evaluation plots.
+A slide-style presentation of the work: the problem, dataset, pipeline, Fuzzy-GCD, the network architecture, the information bottleneck, the four experiments, overall and per-class results, where Fuzzy-GCD helps, agreement and errors, and conclusions. Use the side navigation, the floating controls, or the left and right arrow keys to move between slides.
+
+Its figures come from `frontend/src/data/results.json`. After re-running the evaluation, regenerate it:
+
+```bash
+python backend/export_results.py
+```
 
 ## Prediction Scripts
 
@@ -312,7 +351,7 @@ Run both scripts from the repository root, with the backend's requirements insta
 Classifies a `.parquet` or `.csv` file containing exactly one flow and prints the flow, its GCD features and each model's prediction:
 
 ```bash
-python predict_from_file.py selected_flows/<flow>.parquet
+python predict_from_file.py backend/selected_flows/<flow>.parquet
 ```
 
 ### Predict a Single Flow
@@ -378,18 +417,20 @@ all_models_metrics.png
 highest_gcd_labels.png
 ```
 
-Copies of both plots are in `frontend/src/assets/` and shown on the **Evaluation** page.
+Copies of both plots are in `frontend/src/assets/` and shown on the **Project** page. The outputs used by the interface are kept in `backend/selected_flows/` (move `analyse.py`'s output there, or point `FLOWLENS_SAMPLES_DIR` at it).
 
 The plots can be used to compare the four models and identify application labels where GCD-based features provide the largest improvement.
 
 ## Reproducibility
 
-The evaluation uses:
+Training and evaluation are in `backend/PythonNotebook.ipynb`, written for Kaggle. It searches `DATA_ROOT` (default `/kaggle/input`) for the `session1_flows.parquet` and `session2_flows.parquet` files, so attach the dataset there or change `DATA_ROOT` to run it elsewhere. It uses:
 
 ```text
 Random seed: 42
 Test size: 30%
 Minimum class count: 100
+Epochs: 30 (AdamW, learning rate 1e-3, OneCycleLR, batch size 256)
+IB beta sweep: 0.01, 0.005, 0.0001, 0.00005, 0.000001
 ```
 
 The same preprocessing pipeline is used for all four models to make the model comparison consistent.
@@ -400,7 +441,7 @@ The following are intentionally excluded from version control (see `.gitignore`)
 
 ```text
 VPN-nonVPN-Dataset/        original dataset
-selected_flows/            generated predictions, example flows and plots
+/selected_flows/           analyse.py output at the repository root (backend/selected_flows/ is kept)
 frontend/node_modules/     npm dependencies
 frontend/dist/             production build
 .venv/ venv/ v/ env/       Python virtual environments
@@ -434,9 +475,3 @@ The trained model files and preprocessing artifacts are stored under `models/`.
 * Vite
 * Plain CSS with switchable light and dark themes
 * Lucide icons
-
-## Authors
-
-**Sambhav Singh**
-
-NITK Surathkal

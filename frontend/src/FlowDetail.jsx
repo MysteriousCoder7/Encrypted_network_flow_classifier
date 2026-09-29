@@ -29,6 +29,8 @@ import {
   uncertainty
 } from "./models"
 
+// Full breakdown of one flow: summary, pipeline, each model's vote, probability
+// comparison, traffic profile, packet sizes with Fuzzy-GCD, and the model inputs.
 function FlowDetail({ flow, onClose, scrollOnOpen }) {
   const ref = useRef(null)
 
@@ -159,6 +161,8 @@ function FlowDetail({ flow, onClose, scrollOnOpen }) {
   )
 }
 
+// One model's card: predicted class, verdict against the true label, top three
+// classes, margin and uncertainty.
 function ModelVote({ model, output, correct }) {
   const { margin, entropy } = uncertainty(output)
 
@@ -208,6 +212,7 @@ function ModelVote({ model, output, correct }) {
   )
 }
 
+// The five inference stages, filled in with this flow's values.
 function Pipeline({ flow }) {
   const steps = [
     { title: "Flow file", detail: `${flow.file_name}, row ${flow.row + 1}` },
@@ -233,6 +238,8 @@ function Pipeline({ flow }) {
   )
 }
 
+// Grouped bars of each model's probability for every class that appears in
+// any model's top three.
 function ProbabilityComparison({ flow }) {
   const classes = new Set()
   MODELS.forEach(model => {
@@ -249,6 +256,8 @@ function ProbabilityComparison({ flow }) {
   return <GroupedBars rows={rows} max={1} format={value => pct(value)} />
 }
 
+// Raw flow statistics: duration, bytes, rates, inter-arrival time, packet sizes and
+// the inbound/outbound byte split.
 function TrafficProfile({ flow }) {
   const bytesIn = featureValue(flow, "outer_bytes_in")
   const bytesOut = featureValue(flow, "outer_bytes_out")
@@ -302,6 +311,7 @@ function TrafficProfile({ flow }) {
   )
 }
 
+// Rounds a value up to a readable axis maximum (1, 1.5, 2, 2.5, 3, 4, 5, 6 or 8 x 10^n).
 function niceMax(value) {
   if (value <= 0) return 100
   const magnitude = 10 ** Math.floor(Math.log10(value))
@@ -309,6 +319,8 @@ function niceMax(value) {
   return steps.map(step => step * magnitude).find(step => step >= value)
 }
 
+// Bar chart of every packet size, coloured by whether it lies within the tolerance
+// of a multiple of k, with the multiples of k drawn when they aren't too dense.
 function PacketRhythm({ sizes, k }) {
   if (!sizes?.length) {
     return <p className="empty-note">This flow has no packet sizes, so all GCD features are zero.</p>
@@ -406,6 +418,7 @@ function PacketRhythm({ sizes, k }) {
   )
 }
 
+// The four raw Fuzzy-GCD features with a short explanation of each.
 function GcdStats({ raw }) {
   const items = [
     ["k", `${formatNumber(raw.best_k)} bytes`, "Unit the packet sizes cluster around"],
@@ -427,6 +440,8 @@ function GcdStats({ raw }) {
   )
 }
 
+// All 21 input features, raw and scaled, marking the cells the Fuzzy-GCD input
+// replaces and the value it uses instead.
 function FeatureTable({ flow }) {
   const replacedBy = {}
   flow.gcd.replacement_indices.forEach((featureIndex, gcdIndex) => {
@@ -472,11 +487,12 @@ function FeatureTable({ flow }) {
   )
 }
 
-// Diverging colour around zero: scaled features are centred on the training mean.
-// A fixed ±3 standard deviation range keeps both maps comparable, so one
-// outlier doesn't wash out every other cell.
+// Colour saturates at ±3 standard deviations, so both maps share one scale and a
+// single outlier doesn't wash out every other cell.
 const HEAT_LIMIT = 3
 
+// One 5x5 model input as a heatmap: colour diverges around zero (the training
+// mean), padding cells are hatched and swapped GCD cells outlined.
 function FeatureMap({ title, subtitle, matrix, replaced = [] }) {
   const values = matrix.flat().map(Number)
 

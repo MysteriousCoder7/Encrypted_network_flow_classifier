@@ -17,7 +17,9 @@ import { MODELS, hasLabel, mean, pct } from "./models"
 const TOP_CLASSES = 8
 const BINS = 10
 
-function Insights({ flows }) {
+// Batch-level insights: headline figures, model scorecards and the analysis panels.
+// reference optionally adds each model's full-test-set accuracy to its scorecard.
+function Insights({ flows, reference }) {
   const labelled = flows.filter(hasLabel)
   const hasLabels = labelled.length > 0
 
@@ -73,7 +75,7 @@ function Insights({ flows }) {
         )}
       </div>
 
-      <ModelScorecards flows={flows} labelled={labelled} accuracies={accuracies} />
+      <ModelScorecards flows={flows} labelled={labelled} accuracies={accuracies} reference={reference} />
 
       <div className="insight-grid">
         <Panel
@@ -119,7 +121,9 @@ function Insights({ flows }) {
   )
 }
 
-function ModelScorecards({ flows, labelled, accuracies }) {
+// One card per model: accuracy (or mean confidence without labels), classes
+// predicted, low-confidence count and confidence when right versus wrong.
+function ModelScorecards({ flows, labelled, accuracies, reference }) {
   return (
     <div className="scorecards">
       {MODELS.map((model, index) => {
@@ -149,6 +153,12 @@ function ModelScorecards({ flows, labelled, accuracies }) {
             <div className="meter" aria-hidden="true">
               <div style={{ width: `${headline * 100}%` }} />
             </div>
+
+            {reference?.accuracy?.[model.name] !== undefined && (
+              <p className="scorecard-ref">
+                {reference.label}: <b>{pct(reference.accuracy[model.name])}</b>
+              </p>
+            )}
 
             <dl className="scorecard-stats">
               {accuracy !== null && (
@@ -190,6 +200,8 @@ function ModelScorecards({ flows, labelled, accuracies }) {
   )
 }
 
+// Share of flows each model assigns to the most common classes, with the rest
+// folded into Other.
 function ClassDistribution({ flows }) {
   const counts = {}
 
@@ -221,6 +233,7 @@ function ClassDistribution({ flows }) {
   return <GroupedBars rows={rows} format={value => pct(value, 0)} />
 }
 
+// Pairwise matrix of how often two models predict the same class.
 function AgreementMatrix({ flows }) {
   const [bind, tooltip] = useTooltip()
 
@@ -273,6 +286,7 @@ function AgreementMatrix({ flows }) {
   )
 }
 
+// Histogram of each model's confidence across all flows, in 10% bins.
 function ConfidenceHistograms({ flows }) {
   const [bind, tooltip] = useTooltip()
 
@@ -324,6 +338,8 @@ function ConfidenceHistograms({ flows }) {
   )
 }
 
+// Fuzzy-GCD across the batch: average share of packets on the lattice, mean
+// residual and the most common values of k.
 function GcdSummary({ flows }) {
   const [bind, tooltip] = useTooltip()
 
@@ -377,6 +393,8 @@ function GcdSummary({ flows }) {
   )
 }
 
+// Flows each GCD model gets right where its baseline is wrong (fixed) and the
+// reverse (broken), plus flows only both GCD models get right.
 function GcdEffect({ flows }) {
   const [base, ib, gcd, gcdIb] = [0, 1, 2, 3]
 
@@ -419,6 +437,7 @@ function GcdEffect({ flows }) {
   )
 }
 
+// Most frequent pairs of true label and the wrong class the majority chose.
 function MixUps({ flows }) {
   const counts = {}
   flows

@@ -7,8 +7,8 @@ const K = 22
 const BAR_STEP = 13
 const BAR_COUNT = 40
 
-// Deterministic pseudo-random packet sizes: mostly whole multiples of K,
-// a few off the lattice, like a real encrypted flow.
+// Deterministic pseudo-random packet sizes: mostly whole multiples of K, with about
+// one in five off the lattice, like a real encrypted flow.
 function makeBars() {
   let seed = 7
   const random = () => {
@@ -27,6 +27,7 @@ function makeBars() {
 const bars = makeBars()
 const setWidth = BAR_COUNT * BAR_STEP
 
+// One copy of the bar sequence starting at x = offset; two copies make the loop seamless.
 function BarSet({ offset }) {
   return bars.map((bar, i) => (
     <rect
@@ -41,7 +42,8 @@ function BarSet({ offset }) {
   ))
 }
 
-// Decorative hero visual: a flow's packet sizes streaming past the fuzzy-GCD lattice.
+// Decorative hero visual: packet sizes scrolling past the fuzzy-GCD lattice.
+// Hidden from screen readers and still when reduced motion is on.
 function PacketStream() {
   return (
     <figure className="stream" aria-hidden="true">
